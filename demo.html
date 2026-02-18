@@ -1,0 +1,968 @@
+<!-- Demo HTML File Version 0.5.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>N8N Chat Widget Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .config-form {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"], 
+        input[type="color"],
+        select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .color-preview {
+            width: 30px;
+            height: 30px;
+            display: inline-block;
+            vertical-align: middle;
+            margin-left: 10px;
+            border: 1px solid #ddd;
+        }
+        button {
+            background: #080A56;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #0b0f7b;
+        }
+        .section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background: #fff;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .section h2 {
+            margin-top: 0;
+            color: #080A56;
+        }
+
+        /* Smart Object Styles */
+        .smart-button {
+            background: linear-gradient(135deg, #f0f2ff 0%, #f5f0ff 100%);
+            border: 1px solid rgba(8, 10, 86, 0.1);
+            color: var(--primary-color, #080A56);
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            box-shadow: 0 2px 4px rgba(8, 10, 86, 0.05);
+        }
+
+        .smart-button:hover {
+            background: linear-gradient(135deg, #e6e9ff 0%, #ede6ff 100%);
+            box-shadow: 0 4px 8px rgba(8, 10, 86, 0.1);
+            transform: translateY(-1px);
+        }
+
+        .smart-button:active {
+            transform: translateY(1px);
+            box-shadow: 0 2px 4px rgba(8, 10, 86, 0.05);
+        }
+
+        .smart-list {
+            background: linear-gradient(135deg, #f8f9ff 0%, #faf8ff 100%);
+            border: 1px solid rgba(8, 10, 86, 0.1);
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+
+        .smart-list-item {
+            padding: 10px 15px;
+            margin: 5px 0;
+            border-radius: 4px;
+            color: var(--primary-color, #080A56);
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        .smart-list-item:hover {
+            background: linear-gradient(135deg, #f0f2ff 0%, #f5f0ff 100%);
+        }
+
+        .smart-list-item:active {
+            background: linear-gradient(135deg, #e6e9ff 0%, #ede6ff 100%);
+        }
+
+        /* Apply smart styles to existing elements */
+        button {
+            composes: smart-button;
+        }
+
+        select {
+            composes: smart-button;
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23080A56' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            background-size: 15px;
+            padding-right: 35px;
+        }
+
+        /* Estilos para o painel de código gerado */
+        .code-modal {
+            display: none; /* Escondido por padrão */
+            position: fixed;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 80%;
+            max-width: 600px;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            z-index: 1050;
+            border: 1px solid #eee;
+        }
+
+        .code-modal.show {
+            display: block;
+        }
+
+        .code-modal h2 {
+            margin-top: 0;
+            margin-bottom: 20px;
+            color: #080A56;
+        }
+
+        .code-modal textarea {
+            width: 100%;
+            height: 300px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 13px;
+            margin-bottom: 20px;
+            box-sizing: border-box;
+            resize: vertical;
+            background-color: #f9f9f9;
+        }
+
+        .code-modal .modal-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .code-modal .modal-buttons button {
+            /* Estilos herdados de .smart-button */
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+
+         /* Overlay para escurecer o fundo */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1040;
+        }
+
+        .modal-overlay.show {
+            display: block;
+        }
+
+        /* Container para os botões do formulário */
+        .form-buttons {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            margin-top: 20px; /* Adicionar espaço acima dos botões */
+        }
+
+        /* Styles for multi-language inputs */
+        .language-input-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .language-input-group select {
+            flex: 0 0 120px; /* Fixed width for language select */
+        }
+        .language-input-group input[type="text"] {
+            flex: 1; /* Text input takes remaining space */
+        }
+        .language-input-group .remove-lang-btn {
+            background: #f44336; /* Red background for remove button */
+            color: white;
+            padding: 6px 10px;
+            font-size: 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            border: none;
+            line-height: 1; /* Ensure button text aligns well */
+        }
+        .language-input-group .remove-lang-btn:hover {
+            background: #d32f2f;
+        }
+        .add-lang-btn {
+            margin-top: 10px;
+            background: #4CAF50; /* Green background for add button */
+            color: white;
+            padding: 8px 15px;
+            font-size: 14px;
+        }
+         .add-lang-btn:hover {
+            background: #388E3C;
+        }
+    </style>
+</head>
+<body>
+    <h1>N8N Chat Widget Demo</h1>
+    
+    <div class="config-form">
+        <form id="chatConfigForm">
+            <div class="section">
+                <h2>Webhook Configuration</h2>
+                <div class="form-group">
+                    <label for="webhookUrl">Webhook URL:</label>
+                    <input type="text" id="webhookUrl" name="webhookUrl" value="https://n8n.10k.digital/webhook/f406671e-c954-4691-b39a-66c90aa2f103/chat">
+                </div>
+                <div class="form-group">
+                    <label for="webhookRoute">Webhook Route:</label>
+                    <input type="text" id="webhookRoute" name="webhookRoute" value="general">
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Branding</h2>
+                <div class="form-group">
+                    <label for="logoUrl">Logo URL:</label>
+                    <input type="text" id="logoUrl" name="logoUrl" value="https://10k.digital/wp-content/uploads/2025/03/cropped-favicon-10k-32x32.png">
+                </div>
+                <div class="form-group">
+                    <label for="brandName">Brand Name:</label>
+                    <input type="text" id="brandName" name="brandName" value="10K.Digital">
+                </div>
+                <div class="form-group">
+                    <label>Welcome Text:</label>
+                    <div id="welcomeTextContainer">
+                        <!-- Language inputs will be added here by JS -->
+                    </div>
+                    <button type="button" class="add-lang-btn" data-container="welcomeTextContainer" data-field-name="welcomeText">+</button>
+                </div>
+                <div class="form-group">
+                    <label>Response Time Text:</label>
+                    <div id="responseTimeTextContainer">
+                        <!-- Language inputs will be added here by JS -->
+                    </div>
+                    <button type="button" class="add-lang-btn" data-container="responseTimeTextContainer" data-field-name="responseTimeText">+</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Style</h2>
+                <div class="form-group">
+                    <label for="primaryColor">Primary Color:</label>
+                    <input type="color" id="primaryColor" name="primaryColor" value="#080A56">
+                    <div class="color-preview" style="background-color: #080A56;"></div>
+                </div>
+                <div class="form-group">
+                    <label for="secondaryColor">Secondary Color:</label>
+                    <input type="color" id="secondaryColor" name="secondaryColor" value="#0b0f7b">
+                    <div class="color-preview" style="background-color: #0b0f7b;"></div>
+                </div>
+                <div class="form-group">
+                    <label for="position">Position:</label>
+                    <select id="position" name="position">
+                        <option value="right">Right</option>
+                        <option value="left">Left</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="backgroundColor">Background Color:</label>
+                    <input type="color" id="backgroundColor" name="backgroundColor" value="#ffffff">
+                    <div class="color-preview" style="background-color: #ffffff;"></div>
+                </div>
+                <div class="form-group">
+                    <label for="fontColor">Font Color:</label>
+                    <input type="color" id="fontColor" name="fontColor" value="#333333">
+                    <div class="color-preview" style="background-color: #333333;"></div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Advanced Settings</h2>
+                <div class="form-group">
+                    <label for="debugMode">Debug Mode:</label>
+                    <select id="debugMode" name="debugMode">
+                        <option value="true">Enabled</option>
+                        <option value="false">Disabled</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Proactive Prompt Configuration</h2>
+                <div class="form-group">
+                    <label for="promptEnabled">Enabled:</label>
+                    <select id="promptEnabled" name="promptEnabled">
+                        <option value="true" selected>Enabled</option>
+                        <option value="false">Disabled</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="promptDelay">Delay (ms):</label>
+                    <input type="number" id="promptDelay" name="promptDelay" value="1000">
+                </div>
+                <div class="form-group">
+                    <label>Message:</label>
+                    <div id="promptMessageContainer">
+                        <!-- Language inputs will be added here by JS -->
+                    </div>
+                    <button type="button" class="add-lang-btn" data-container="promptMessageContainer" data-field-name="promptMessage">+</button>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Chat Behavior</h2>
+                <div class="form-group">
+                    <label for="skipWelcome">Skip Welcome Screen:</label>
+                    <select id="skipWelcome" name="skipWelcome">
+                        <option value="false">Disabled</option>
+                        <option value="true" selected>Enabled</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Metadata Section -->
+            <div class="section">
+                <h2>Metadata Configuration</h2>
+                <div class="form-group">
+                    <label for="detectLocation">Detect User Location (via IP):</label>
+                    <select id="detectLocation" name="detectLocation">
+                        <option value="true" selected>Enabled</option>
+                        <option value="false">Disabled</option>
+                    </select>
+                    <p style="font-size: 0.85em; color: #666; margin-top: 5px;">
+                        Attempts to get user city/country via IP address (requires external API call by the widget). Non-intrusive.
+                    </p>
+                </div>
+
+                <h3 style="margin-top: 20px; margin-bottom: 10px; color: #555;">Metadata Overrides</h3>
+                <p style="font-size: 0.9em; color: #666; margin-top: -5px; margin-bottom: 15px;">
+                    Optionally provide values to override detected/default metadata sent to the webhook.
+                </p>
+                <div class="form-group">
+                    <label for="metadataUserId">User ID:</label>
+                    <input type="text" id="metadataUserId" name="metadataUserId" placeholder="(Default: empty)">
+                </div>
+                <div class="form-group">
+                    <label for="metadataUserEmail">User Email:</label>
+                    <input type="email" id="metadataUserEmail" name="metadataUserEmail" placeholder="(Default: empty)">
+                </div>
+                <div class="form-group">
+                    <label for="metadataLanguage">Language:</label>
+                    <input type="text" id="metadataLanguage" name="metadataLanguage" placeholder="(Default: detected from URL/browser)">
+                </div>
+                <div class="form-group">
+                    <label for="metadataBaseUrl">Base URL:</label>
+                    <input type="text" id="metadataBaseUrl" name="metadataBaseUrl" placeholder="(Default: detected from window.location)">
+                </div>
+                <div class="form-group">
+                    <label for="metadataDetectedLocation">Detected Location:</label>
+                    <input type="text" id="metadataDetectedLocation" name="metadataDetectedLocation" placeholder="(Default: auto-detected if enabled)">
+                    <p style="font-size: 0.85em; color: #666; margin-top: 5px;">
+                        Use this to *force* a location value, e.g., for testing.
+                    </p>
+                </div>
+                <div class="form-group">
+                    <label for="metadataDetectedTimezone">Detected Timezone:</label>
+                    <input type="text" id="metadataDetectedTimezone" name="metadataDetectedTimezone" placeholder="(Default: auto-detected from browser)">
+                     <p style="font-size: 0.85em; color: #666; margin-top: 5px;">
+                        Uses Intl API. Example: America/New_York, Europe/London.
+                    </p>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Greeting Message Configuration</h2>
+                <div class="form-group">
+                    <label>Greeting Message:</label>
+                    <div id="greetingMessageContainer">
+                        <!-- Language inputs will be added here by JS -->
+                    </div>
+                    <button type="button" class="add-lang-btn" data-container="greetingMessageContainer" data-field-name="greetingMessage">+</button>
+                </div>
+            </div>
+
+            <div class="form-buttons">
+                <button type="submit">Load Chat Widget</button>
+                <button type="button" id="generateCodeBtn">Generate Code</button> 
+                <button type="button" id="clearBtn">Clear Widget</button>
+                <button type="button" id="resetBtn">Reset Form</button>
+            </div>
+        </form>
+    </div>
+
+    <div id="chatContainer"></div>
+
+    <!-- Painel Flutuante para Código Gerado -->
+    <div class="modal-overlay" id="modalOverlay"></div>
+    <div class="code-modal" id="codeModal">
+        <h2>Generated Configuration Code</h2>
+        <textarea id="generatedCodeArea" readonly></textarea>
+        <div class="modal-buttons">
+            <button id="copyCodeBtn">Copy to Clipboard</button>
+            <button id="closeModalBtn">Close</button>
+        </div>
+    </div>
+
+    <script>
+        const languageOptions = [
+            { code: 'en', name: 'English' },
+            { code: 'en-US', name: 'English (US)' },
+            { code: 'en-GB', name: 'English (UK)' },
+            { code: 'pt', name: 'Português' },
+            { code: 'pt-BR', name: 'Português (Brasil)' },
+            { code: 'pt-PT', name: 'Português (Portugal)' },
+            { code: 'es', name: 'Español' },
+            { code: 'es-ES', name: 'Español (España)' },
+            { code: 'es-MX', name: 'Español (México)' },
+            { code: 'fr', name: 'Français' },
+            { code: 'de', name: 'Deutsch' },
+            { code: 'it', name: 'Italiano' },
+            { code: 'ar', name: 'العربية' },
+            // Add more languages as needed
+        ];
+
+        const multiLangContainers = [
+            { id: 'welcomeTextContainer', fieldName: 'welcomeText', defaults: { en: 'Hi 👋, how can we help?', pt: 'Oi 👋, como podemos ajudar?' } },
+            { id: 'responseTimeTextContainer', fieldName: 'responseTimeText', defaults: { en: 'We typically respond right away', pt: 'Normalmente respondemos imediatamente' } },
+            { id: 'promptMessageContainer', fieldName: 'promptMessage', defaults: { en: 'Chat with our AI now and resolve all your doubts!', pt: 'Converse com nossa IA agora e resolva todas as suas dúvidas!' } },
+            { id: 'greetingMessageContainer', fieldName: 'greetingMessage', defaults: { en: 'Hi! How can I help you today?', pt: 'Olá! Como posso ajudar você hoje?' } }
+        ];
+
+        // Function to create a language select element
+        function createLanguageSelect(selectedLang = '') {
+            const select = document.createElement('select');
+            select.className = 'language-select';
+            languageOptions.forEach(lang => {
+                const option = document.createElement('option');
+                option.value = lang.code;
+                // Display both code and name
+                option.textContent = `${lang.code} - ${lang.name}`;
+                if (lang.code === selectedLang) {
+                    option.selected = true;
+                }
+                select.appendChild(option);
+            });
+             // Add custom option
+            const customOption = document.createElement('option');
+            customOption.value = 'custom';
+            customOption.textContent = 'Custom...';
+            select.appendChild(customOption);
+
+            select.addEventListener('change', handleLanguageChange);
+            return select;
+        }
+
+        // Function to handle language selection change (including custom)
+        function handleLanguageChange(event) {
+            const selectElement = event.target;
+            if (selectElement.value === 'custom') {
+                const customLang = prompt('Enter custom language code (e.g., ja-JP):');
+                if (customLang && !languageOptions.some(opt => opt.code === customLang)) {
+                     // Add the new custom language to the options list if it doesn't exist
+                    const newOptionExists = Array.from(selectElement.options).some(opt => opt.value === customLang);
+                    if (!newOptionExists) {
+                         const newOption = document.createElement('option');
+                        newOption.value = customLang;
+                         // Display code for custom language as well
+                        newOption.textContent = `${customLang} - Custom`;
+                        // Insert before the 'Custom...' option
+                        selectElement.insertBefore(newOption, selectElement.options[selectElement.options.length - 1]);
+                    }
+                     selectElement.value = customLang; // Select the newly added/existing custom option
+                     // Synchronize this new custom language across all fields
+                     synchronizeLanguage(customLang);
+                 } else if (customLang) {
+                     selectElement.value = customLang; // Select existing custom option
+                 } else {
+                    // User cancelled or entered nothing, revert to previous selection if possible
+                    selectElement.selectedIndex = 0; // Revert to the first option or handle differently
+                }
+            }
+        }
+
+        // Function to add a new language input row
+        function addLanguageInput(containerId, fieldName, langCode = '', textValue = '', readOnlyLang = false) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+
+            const group = document.createElement('div');
+            group.className = 'language-input-group';
+
+            const langSelect = createLanguageSelect(langCode);
+            if (readOnlyLang) {
+                langSelect.disabled = true; // Disable select for default languages if needed
+                 // Ensure the correct default option is selected even if disabled
+                langSelect.value = langCode;
+            }
+
+            const textInput = document.createElement('input');
+            textInput.type = 'text';
+            textInput.value = textValue;
+            textInput.dataset.lang = langCode; // Store lang code initially
+            textInput.name = `${fieldName}[${langCode}]`; // Use initial lang code in name
+
+            // Update input name and dataset when language changes
+             langSelect.addEventListener('change', (e) => {
+                const newLang = e.target.value;
+                // Prevent using 'custom' as a language code
+                if (newLang === 'custom') return;
+
+                textInput.dataset.lang = newLang;
+                textInput.name = `${fieldName}[${newLang}]`;
+                // Sync language addition if it's a new valid language for this container
+                 if (newLang && !isLanguagePresentInContainer(containerId, newLang, group)) {
+                     synchronizeLanguage(newLang, containerId); // Sync but exclude the current container
+                 }
+             });
+
+
+            const removeBtn = document.createElement('button');
+            removeBtn.type = 'button';
+            removeBtn.textContent = '✖'; // Use '✖' or '-'
+            removeBtn.className = 'remove-lang-btn';
+            removeBtn.title = 'Remove Language';
+             if (readOnlyLang) {
+                removeBtn.disabled = true; // Cannot remove default languages
+                removeBtn.style.opacity = '0.5';
+                removeBtn.style.cursor = 'not-allowed';
+            } else {
+                 removeBtn.onclick = () => {
+                     group.remove();
+                 };
+            }
+
+
+            group.appendChild(langSelect);
+            group.appendChild(textInput);
+            group.appendChild(removeBtn);
+            container.appendChild(group);
+        }
+
+        // Initialize default language fields
+        function initializeDefaultLanguages() {
+            multiLangContainers.forEach(containerInfo => {
+                const container = document.getElementById(containerInfo.id);
+                if(container) container.innerHTML = ''; // Clear previous entries first
+                Object.entries(containerInfo.defaults).forEach(([langCode, textValue]) => {
+                    const isDefaultReadOnly = langCode === 'en' || langCode === 'pt';
+                    addLanguageInput(containerInfo.id, containerInfo.fieldName, langCode, textValue, isDefaultReadOnly);
+                });
+            });
+        }
+
+        // Function to check if a language input already exists in a container (excluding self)
+        function isLanguagePresentInContainer(containerId, langCode, excludeGroup = null) {
+            const container = document.getElementById(containerId);
+            if (!container) return false;
+            const groups = container.querySelectorAll('.language-input-group');
+            for (const group of groups) {
+                if (group === excludeGroup) continue; // Don't check against the element triggering the check
+                const select = group.querySelector('select.language-select');
+                if (select && select.value === langCode) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // Function to synchronize a language across all multi-language fields
+        function synchronizeLanguage(langCode, excludeContainerId = null) {
+             if (!langCode || langCode === 'custom') return; // Do not sync 'custom' placeholder
+
+            console.log(`Synchronizing language: ${langCode}, excluding ${excludeContainerId}`);
+            multiLangContainers.forEach(containerInfo => {
+                if (containerInfo.id === excludeContainerId) return; // Skip the container that triggered the sync
+
+                // Check if the language already exists in this container
+                if (!isLanguagePresentInContainer(containerInfo.id, langCode)) {
+                     console.log(`Adding ${langCode} to ${containerInfo.id}`);
+                     // Add the language input, defaults to empty string, not read-only
+                     addLanguageInput(containerInfo.id, containerInfo.fieldName, langCode, '', false);
+                     // Ensure the new select has the correct value selected
+                     const container = document.getElementById(containerInfo.id);
+                     const addedGroup = container.querySelector(`.language-input-group select.language-select[value="${langCode}"]`);
+                      if (addedGroup) {
+                         addedGroup.parentElement.querySelector('select.language-select').value = langCode;
+                     } else {
+                          // Find the newly added group (last one) and set its select value
+                         const lastGroup = container.querySelector('.language-input-group:last-child');
+                         if(lastGroup) {
+                             const select = lastGroup.querySelector('select.language-select');
+                             if(select) select.value = langCode;
+                         }
+                     }
+                }
+            });
+        }
+
+        // Add event listeners to "Add Language" buttons
+        document.querySelectorAll('.add-lang-btn').forEach(button => {
+            button.addEventListener('click', () => {
+                const containerId = button.dataset.container;
+                const fieldName = button.dataset.fieldName;
+                addLanguageInput(containerId, fieldName); // Add with default empty values
+            });
+        });
+
+         // Function to collect multi-language data
+        function getMultiLanguageData(containerId) {
+            const container = document.getElementById(containerId);
+            const data = {};
+            container.querySelectorAll('.language-input-group').forEach(group => {
+                const langSelect = group.querySelector('.language-select');
+                const textInput = group.querySelector('input[type="text"]');
+                const lang = langSelect.value;
+                const text = textInput.value.trim();
+                if (lang && lang !== 'custom' && text) { // Ensure language is selected and text is not empty
+                    data[lang] = text;
+                }
+            });
+            return data;
+        }
+
+        // Handle form submission (com logs detalhados)
+        document.getElementById('chatConfigForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            console.log("Form submission prevented. Starting widget load process...");
+            
+            console.log("Attempting to remove existing widget...");
+            removeChatWidget();
+            
+            // Obter valores dos campos padrão e metadados
+            const formData = new FormData(this);
+            const detectLocation = formData.get('detectLocation') === 'true';
+            const metadataOverrides = {};
+            const userIdOverride = formData.get('metadataUserId').trim();
+            const userEmailOverride = formData.get('metadataUserEmail').trim();
+            const languageOverride = formData.get('metadataLanguage').trim();
+            const baseUrlOverride = formData.get('metadataBaseUrl').trim();
+            const locationOverride = formData.get('metadataDetectedLocation').trim();
+            const timezoneOverride = formData.get('metadataDetectedTimezone').trim();
+
+            if (userIdOverride) metadataOverrides.userId = userIdOverride;
+            if (userEmailOverride) metadataOverrides.userEmail = userEmailOverride;
+            if (languageOverride) metadataOverrides.language = languageOverride;
+            if (baseUrlOverride) metadataOverrides.baseUrl = baseUrlOverride;
+            if (locationOverride) metadataOverrides.detectedLocation = locationOverride;
+            if (timezoneOverride) metadataOverrides.detectedTimeZone = timezoneOverride;
+
+            const config = {
+                webhook: {
+                    url: formData.get('webhookUrl'),
+                    route: formData.get('webhookRoute')
+                },
+                branding: {
+                    logo: formData.get('logoUrl'),
+                    name: formData.get('brandName'),
+                    welcomeText: getMultiLanguageData('welcomeTextContainer'),
+                    responseTimeText: getMultiLanguageData('responseTimeTextContainer')
+                },
+                style: {
+                    primaryColor: formData.get('primaryColor'),
+                    secondaryColor: formData.get('secondaryColor'),
+                    position: formData.get('position'),
+                    backgroundColor: formData.get('backgroundColor'),
+                    fontColor: formData.get('fontColor')
+                },
+                proactivePrompt: {
+                    enabled: formData.get('promptEnabled') === 'true',
+                    delay: parseInt(formData.get('promptDelay'), 10) || 5000,
+                    message: getMultiLanguageData('promptMessageContainer')
+                },
+                 skipWelcomeScreen: formData.get('skipWelcome') === 'true',
+                 greetingMessage: getMultiLanguageData('greetingMessageContainer'),
+                 debug: formData.get('debugMode') === 'true',
+                 // Add metadata only if overrides exist
+                 ...(Object.keys(metadataOverrides).length > 0 && { metadata: metadataOverrides }),
+                 detectLocation: detectLocation
+            };
+            console.log("Generated config:", config);
+
+            // Definir configuração global
+            window.ChatWidgetConfig = config;
+            console.log("window.ChatWidgetConfig set.");
+
+            // Carregar o script do widget
+            const script = document.createElement('script');
+            script.id = 'n8n-chat-widget-script';
+            script.src = 'chat-widget.js'; // Change to chat-widget-latest.js in production
+            script.defer = true; // Adicionado defer
+            script.onerror = function() { // Adicionado onerror
+                console.error('Failed to load '+ script.src +'!');
+                alert('Error loading the chat widget script. Check the console and script path.');
+            };
+            document.body.appendChild(script);
+            console.log("Script tag appended to body.");
+        });
+
+        // Lógica para o modal de código gerado
+        const generateCodeBtn = document.getElementById('generateCodeBtn');
+        const codeModal = document.getElementById('codeModal');
+        const modalOverlay = document.getElementById('modalOverlay');
+        const generatedCodeArea = document.getElementById('generatedCodeArea');
+        const copyCodeBtn = document.getElementById('copyCodeBtn');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+        const chatConfigForm = document.getElementById('chatConfigForm');
+        const clearBtn = document.getElementById('clearBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const chatContainer = document.getElementById('chatContainer');
+
+        function generateConfigCode(config) {
+            // Criar uma cópia limpa removendo funções ou dados não serializáveis
+            const serializableConfig = JSON.parse(JSON.stringify(config, (key, value) => {
+                // Excluir chaves que não devem ser expostas ou não são simples
+                if (typeof value === 'function') return undefined;
+                return value;
+            }));
+            
+            // Formatar o objeto como uma string JavaScript
+            const configString = JSON.stringify(serializableConfig, null, 4);
+            
+            return `<script>
+  window.ChatWidgetConfig = ${configString};
+<\/script>
+<script src="https://felipematos.github.io/n8n-advanced-chatclient/stable/chat-widget.js" defer><\/script>`;
+        }
+
+        generateCodeBtn.addEventListener('click', () => {
+            // Obter a configuração atual do formulário (similar ao submit)
+            const formData = new FormData(document.getElementById('chatConfigForm'));
+            const currentConfig = {
+                webhook: {
+                    url: formData.get('webhookUrl'),
+                    route: formData.get('webhookRoute')
+                },
+                branding: {
+                    logo: formData.get('logoUrl'),
+                    name: formData.get('brandName'),
+                    welcomeText: getMultiLanguageData('welcomeTextContainer'),
+                    responseTimeText: getMultiLanguageData('responseTimeTextContainer')
+                },
+                style: {
+                    primaryColor: formData.get('primaryColor'),
+                    secondaryColor: formData.get('secondaryColor'),
+                    position: formData.get('position'),
+                    backgroundColor: formData.get('backgroundColor'),
+                    fontColor: formData.get('fontColor')
+                },
+                proactivePrompt: {
+                    enabled: formData.get('promptEnabled') === 'true',
+                    delay: parseInt(formData.get('promptDelay'), 10),
+                    message: getMultiLanguageData('promptMessageContainer')
+                },
+                skipWelcomeScreen: formData.get('skipWelcome') === 'true',
+                greetingMessage: getMultiLanguageData('greetingMessageContainer'),
+                debug: formData.get('debugMode') === 'true'
+            };
+            
+            const generatedCode = generateConfigCode(currentConfig);
+            generatedCodeArea.value = generatedCode;
+            codeModal.classList.add('show');
+            modalOverlay.classList.add('show');
+        });
+
+        closeModalBtn.addEventListener('click', () => {
+            codeModal.classList.remove('show');
+            modalOverlay.classList.remove('show');
+            initializeDefaultLanguages(); // Add back the default en/pt fields
+
+            // Update color previews after reset
+            document.querySelectorAll('input[type="color"]').forEach(input => {
+                // Trigger the input event to update the preview
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+            });
+            // Reset metadata fields and prefill placeholders
+            initializeMetadataFields();
+            document.getElementById('detectLocation').value = 'true'; // Reset toggle
+
+            console.log("Form reset to default values and structure.");
+        });
+
+        modalOverlay.addEventListener('click', () => {
+            codeModal.classList.remove('show');
+            modalOverlay.classList.remove('show');
+        });
+
+        copyCodeBtn.addEventListener('click', () => {
+            generatedCodeArea.select();
+            try {
+                navigator.clipboard.writeText(generatedCodeArea.value);
+                copyCodeBtn.textContent = 'Copied!';
+                setTimeout(() => {
+                    copyCodeBtn.textContent = 'Copy to Clipboard';
+                }, 2000);
+            } catch (err) {
+                console.error('Failed to copy text: ', err);
+                // Fallback para o método antigo (pode não funcionar em todos os navegadores)
+                try {
+                    document.execCommand('copy');
+                    copyCodeBtn.textContent = 'Copied!';
+                     setTimeout(() => {
+                        copyCodeBtn.textContent = 'Copy to Clipboard';
+                    }, 2000);
+                } catch (execErr) {
+                    console.error('Fallback copy failed: ', execErr);
+                    alert('Failed to copy code. Please copy manually.');
+                }
+            }
+        });
+
+        // Função para remover o widget do DOM
+        function removeChatWidget() {
+             // Remover o container principal do widget se existir
+            const widget = document.querySelector('.n8n-chat-widget');
+            if (widget) {
+                widget.remove();
+                console.log("Chat widget removed from DOM.");
+            }
+            // Remover script se existir (pode ser necessário se o script manipular estado global)
+            const existingScript = document.getElementById('n8n-chat-widget-script');
+            if (existingScript) {
+                existingScript.remove();
+                console.log("Chat widget script removed.");
+            }
+             // Resetar flag de inicialização se usada no script principal
+            if (window.N8NChatWidgetInitialized) {
+                 window.N8NChatWidgetInitialized = false;
+            }
+            // Limpar o container interno (precaução)
+            if (chatContainer) {
+                chatContainer.innerHTML = '';
+            }
+            console.log("Chat widget elements removed or reset.");
+        }
+
+        // Limpar o widget do DOM
+        clearBtn.addEventListener('click', () => {
+            removeChatWidget();
+        });
+
+        // Resetar o formulário para os valores padrão e limpar o widget
+        resetBtn.addEventListener('click', () => {
+            removeChatWidget();
+            chatConfigForm.reset(); // Reseta o formulário para valores padrão definidos no HTML
+            // Atualizar as prévias de cor após o reset
+            document.querySelectorAll('input[type="color"]').forEach(input => {
+                input.dispatchEvent(new Event('input')); 
+            });
+             console.log("Form reset to default values.");
+        });
+
+        // Update color previews when color inputs change
+        document.querySelectorAll('input[type="color"]').forEach(input => {
+            input.addEventListener('input', function() {
+                // Ensure the preview element exists next to the input
+                const preview = this.nextElementSibling;
+                if (preview && preview.classList.contains('color-preview')) {
+                    preview.style.backgroundColor = this.value;
+                } else {
+                     console.warn("Color preview element not found next to input:", this.id);
+                }
+            });
+            // Initial preview update on load
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+
+        // Function to set placeholders and prefill values for metadata overrides
+        function initializeMetadataFields() {
+            // --- Get detected values ---
+            const url = window.location.href;
+            const langMatch = url.match(/\/([a-z]{2})(?:[-_]([a-z]{2}))?\/?(?:\?|#|$)/i);
+            const detectedLang = langMatch ? langMatch[0].replace(/[/\\\?#]/g, '').toLowerCase() : (navigator.language || navigator.userLanguage || 'en');
+            const baseUrl = window.location.origin;
+
+             // --- Set Placeholders ---
+             document.getElementById('metadataUserId').placeholder = `(Default: empty)`;
+             document.getElementById('metadataUserEmail').placeholder = `(Default: empty)`;
+             document.getElementById('metadataLanguage').placeholder = `(Widget default: en)`;
+             document.getElementById('metadataBaseUrl').placeholder = `(Widget default: page URL)`;
+             document.getElementById('metadataDetectedLocation').placeholder = `(Default: auto-detected if enabled)`;
+             document.getElementById('metadataDetectedTimezone').placeholder = `(Default: auto-detected from browser)`;
+
+             // --- Clear or Prefill Inputs ---
+             document.getElementById('metadataUserId').value = '';
+             document.getElementById('metadataUserEmail').value = '';
+             document.getElementById('metadataLanguage').value = detectedLang; // Prefill detected
+             document.getElementById('metadataBaseUrl').value = baseUrl; // Prefill detected
+             document.getElementById('metadataDetectedLocation').value = ''; // Clear override field
+
+             // Prefill timezone
+             try {
+                 const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+                 document.getElementById('metadataDetectedTimezone').value = detectedTz;
+             } catch (e) {
+                 console.warn("Could not detect browser timezone.", e);
+                 document.getElementById('metadataDetectedTimezone').value = ''; // Clear if detection fails
+                 document.getElementById('metadataDetectedTimezone').placeholder = `(Could not detect)`;
+             }
+        }
+
+        // Initial setup
+        initializeDefaultLanguages();
+        initializeMetadataFields(); // Set initial placeholders and prefill values
+
+        // Listener for location detected event from the widget
+        document.body.addEventListener('n8nLocationDetected', (event) => {
+            const locationData = event.detail;
+            const locationInput = document.getElementById('metadataDetectedLocation');
+            if (locationInput) {
+                if (locationData && locationData.city && locationData.country) {
+                    const locationString = `${locationData.city}, ${locationData.country}`;
+                    locationInput.value = locationString; // Update the input value
+                    locationInput.placeholder = `(Auto: ${locationString})`; // Optionally update placeholder too
+                    console.log('Demo received location:', locationData);
+                } else {
+                    // Handle cases where location is null or data is incomplete
+                    locationInput.placeholder = `(Auto: Not detected/available)`;
+                    console.log('Demo received location: Not detected or unavailable.');
+                }
+            }
+        });
+
+    </script>
+</body>
+</html> 
