@@ -6,7 +6,7 @@
     // --- Essential Variable Declarations ---
     let config = {};
     let widgetContainer, launcherButton, chatContainer, closeButton, chatInterface, messagesContainer, textarea, sendButton, typingIndicator, fontSizeToggle, chatHeader, chatMessages, proactivePromptElement, newChatBtn, phoneInputField, phoneCountrySelect, quickActionButtonContainer, mainInputArea;
-    let currentSessionId = null;
+    let currentSessionId = sessionStorage.getItem('n8nChatSessionId') || null;
     let messages = [];
     let isChatOpen = false;
     let isSending = false;
@@ -525,6 +525,7 @@
         /* Estilos para objetos de ação rápida */
         .n8n-chat-widget .quick-action-container {
             display: flex;
+            flex-direction: var(--n8n-chat-quick-action-direction, row);
             flex-wrap: wrap;
             gap: 8px;
             margin-top: 10px;
@@ -801,6 +802,7 @@
         }
         .n8n-chat-widget .quick-action-container {
             display: flex;
+            flex-direction: var(--n8n-chat-quick-action-direction, row);
             align-items: center;
             gap: 4px;
             width: 100%;
@@ -997,14 +999,28 @@
         chatInterface.classList.add('active');
         // Always clear welcome screen remnants
         if (typeof chatMessages !== 'undefined') chatMessages.innerHTML = '';
-        startNewConversation()
-            .then(() => setTimeout(() => textarea.focus(), 100))
-            .catch((error) => {
-                console.error("[DEBUG] startNewConversation().catch block triggered. Error object:", error); // Added log
-                debug('Erro ao iniciar conversa (skip welcome):', error, true);
-                if (typeof config.onError === 'function') config.onError(error);
-                setTimeout(() => textarea.focus(), 100);
+
+        // Check for saved chat session to restore
+        const savedMessages = sessionStorage.getItem('n8nChatMessages');
+        if (currentSessionId && savedMessages) {
+            debug('[RESTORE] Restoring chat from sessionStorage');
+            messagesContainer.innerHTML = savedMessages;
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            // Re-attach event listeners on restored quick-action elements
+            messagesContainer.querySelectorAll('.chat-message.bot').forEach(msg => {
+                addQuickActionEventListeners(msg);
             });
+            setTimeout(() => textarea.focus(), 100);
+        } else {
+            startNewConversation()
+                .then(() => setTimeout(() => textarea.focus(), 100))
+                .catch((error) => {
+                    console.error("[DEBUG] startNewConversation().catch block triggered. Error object:", error); // Added log
+                    debug('Erro ao iniciar conversa (skip welcome):', error, true);
+                    if (typeof config.onError === 'function') config.onError(error);
+                    setTimeout(() => textarea.focus(), 100);
+                });
+        }
     } else if (!isFirstTime) {
         if (!chatInterface.classList.contains('active')) {
             if (newConv) newConv.style.display = 'none';
@@ -1188,7 +1204,9 @@
                 expandedView: window.ChatWidgetConfig.expandedView || defaultConfig.expandedView,
                 languageTexts: { ...defaultConfig.languageTexts, ...(window.ChatWidgetConfig.languageTexts || {}) }, // Merge languageTexts as well
                 metadata: { ...defaultConfig.metadata, ...(window.ChatWidgetConfig.metadata || {}) }, // Merge metadata
-                detectLocation: typeof window.ChatWidgetConfig.detectLocation === 'boolean' ? window.ChatWidgetConfig.detectLocation : defaultConfig.detectLocation // Merge detectLocation
+                detectLocation: typeof window.ChatWidgetConfig.detectLocation === 'boolean' ? window.ChatWidgetConfig.detectLocation : defaultConfig.detectLocation, // Merge detectLocation
+                linkTarget: window.ChatWidgetConfig.linkTarget || null,
+                baseUrl: window.ChatWidgetConfig.baseUrl || ''
             } : defaultConfig;
 
         // Calculate effective language AFTER merging config, detect from URL path
@@ -1286,6 +1304,9 @@
         widgetContainer.style.setProperty('--n8n-chat-secondary-color', config.style.secondaryColor);
         widgetContainer.style.setProperty('--n8n-chat-background-color', config.style.backgroundColor);
         widgetContainer.style.setProperty('--n8n-chat-font-color', config.style.fontColor);
+        if (config.style.quickActionLayout) {
+            widgetContainer.style.setProperty('--n8n-chat-quick-action-direction', config.style.quickActionLayout);
+        }
 
         chatContainer = document.createElement('div');
         chatContainer.className = `chat-container${config.style.position === 'left' ? ' position-left' : ''}`;
@@ -1651,7 +1672,7 @@
         // 4) extract select lists [{list|Title|opt:act|…}]
         cleaned = cleaned.replace(
         /\[\{(list|lista):([^|]+)\|([^}]+)\}\]/gi,
-        (_m, title, opts) => {
+        (_m, _type, title, opts) => {
             const options = opts.split('|').map(o => {
             const [t,a] = o.split(':').map(s => s.trim()); // Trim text and action
             return { text: t.trim(), action: a.trim(), type: isValidUrl(a.trim()) ? 'external' : 'normal' };
@@ -1778,9 +1799,16 @@
                 });
         };
 
+        function saveChat() {
+            if (messagesContainer) {
+                sessionStorage.setItem('n8nChatMessages', messagesContainer.innerHTML);
+            }
+        }
+
         async function startNewConversation() {
             console.log("[DEBUG] startNewConversation: START"); // Added log
             currentSessionId = generateUUID();
+            sessionStorage.setItem('n8nChatSessionId', currentSessionId);
             // Get metadata asynchronously first
             const metadata = await getMetadata();
 
@@ -1894,6 +1922,7 @@
             userMessageDiv.className = 'chat-message user';
             userMessageDiv.textContent = maskedMessage || message;
             messagesContainer.appendChild(userMessageDiv);
+            saveChat();
         }
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
@@ -2141,11 +2170,21 @@
             
             // Processar cabeçalhos
             html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-            html = html.replace(/^## (.+)$/gm, '<h2>$2</h2>');
-            html = html.replace(/^### (.+)$/gm, '<h3>$3</h3>');
+            html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+            html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
             
             // Processar links - [texto](url)
-            html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank">$1</a>');
+            const linkTarget = config.linkTarget === 'same' ? '_self' : '_blank';
+            let baseUrl = config.baseUrl || window.location.origin;
+            if (!config.baseUrl) {
+                const localeMatch = window.location.pathname.match(/^\/([a-z]{2}(?:[-_][a-z]{2})?)(?:\/|$)/i);
+                if (localeMatch) baseUrl += '/' + localeMatch[1];
+            }
+            baseUrl = baseUrl.replace(/\/$/, '');
+            html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, text, url) => {
+                const href = (!url.match(/^https?:\/\//)) ? baseUrl + url : url;
+                return `<a href="${href}" target="${linkTarget}">${text}</a>`;
+            });
             
             // Processar negrito - **texto**
             html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
@@ -2235,6 +2274,7 @@
             
             messagesContainer.appendChild(botMessageDiv);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            saveChat();
         }
 
         // Função para renderizar objetos de ação rápida
@@ -2662,15 +2702,18 @@
 
             // Processar links embutidos e adicionar ao texto da mensagem
             if (quickActions.links.length > 0) {
-                const originalContent = messageElement.innerHTML;
-                let newContent = originalContent;
-                
+                const linksContainer = document.createElement('div');
+                linksContainer.className = 'quick-action-container';
+
                 quickActions.links.forEach(link => {
-                    const linkHTML = `<a class="quick-action-link" data-action="${link.action}">${link.text}</a>`;
-                    newContent += ' ' + linkHTML;
+                    const linkElement = document.createElement('a');
+                    linkElement.className = 'quick-action-link';
+                    linkElement.dataset.action = link.action;
+                    linkElement.textContent = link.text;
+                    linksContainer.appendChild(linkElement);
                 });
-                
-                messageElement.innerHTML = newContent;
+
+                messageElement.appendChild(linksContainer);
             }
             
             // Verificar se há botões ou listas de seleção
@@ -2797,6 +2840,11 @@
             newChatBtn.addEventListener('click', async function(e) {
             e.preventDefault();
 
+            // Clear saved chat session when starting a new conversation
+            sessionStorage.removeItem('n8nChatSessionId');
+            sessionStorage.removeItem('n8nChatMessages');
+            currentSessionId = null;
+
             // Apenas esconder a tela de nova conversa, mantendo o cabeçalho
             chatContainer.querySelector('.new-conversation').style.display = 'none';
             chatInterface.classList.add('active');
@@ -2849,6 +2897,7 @@
             if (!isOpen) {
                 // Abrindo o chat
                 chatContainer.classList.add('open');
+                sessionStorage.setItem('n8nChatOpen', 'true');
                 hideProactivePrompt(); // Esconder prompt se estiver visível
 
                 if (config.skipWelcomeScreen && isFirstTime) {
@@ -2893,6 +2942,7 @@
             } else {
                 // Fechando o chat
                 chatContainer.classList.remove('open');
+                sessionStorage.setItem('n8nChatOpen', 'false');
             }
 
             debug('Classe open ' + (chatContainer.classList.contains('open') ? 'adicionada' : 'removida'));
@@ -2905,6 +2955,7 @@
             button.addEventListener('click', () => {
                 debug('Botão de fechar clicado');
                 chatContainer.classList.remove('open');
+                sessionStorage.setItem('n8nChatOpen', 'false');
             });
         });
 
@@ -3008,6 +3059,28 @@
                 }
             }, config.proactivePrompt.delay);
             debug(`Prompt proativo agendado para ${config.proactivePrompt.delay / 1000}s`);
+        }
+
+        // Auto-open chat if it was open before page navigation
+        if (sessionStorage.getItem('n8nChatOpen') === 'true' && currentSessionId) {
+            debug('[RESTORE] Auto-opening chat from sessionStorage');
+            chatContainer.classList.add('open');
+            hideProactivePrompt();
+            // Hide welcome screen and activate chat interface
+            const welcomeScreen = chatContainer.querySelector('.new-conversation');
+            if (welcomeScreen) welcomeScreen.style.display = 'none';
+            chatInterface.classList.add('active');
+            // Restore messages
+            const savedMessages = sessionStorage.getItem('n8nChatMessages');
+            if (savedMessages) {
+                messagesContainer.innerHTML = savedMessages;
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                // Re-attach event listeners on restored quick-action elements
+                messagesContainer.querySelectorAll('.chat-message.bot').forEach(msg => {
+                    addQuickActionEventListeners(msg);
+                });
+            }
+            setTimeout(() => textarea.focus(), 100);
         }
 
         // Função para obter mensagem de saudação traduzida (REVISADA - Simplified)
