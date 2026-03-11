@@ -1189,7 +1189,10 @@
             skipWelcomeScreen: false,
             greetingMessage: defaultGreetingMessages, // Use the predefined object
             expandedView: false, // Default expanded view state
-            languageTexts: {} // Initialize as empty, will be populated below
+            languageTexts: {}, // Initialize as empty, will be populated below
+            streaming: {
+                tokenDelayMs: 30
+            }
         };
 
         // Merge user config with defaults
@@ -1206,7 +1209,8 @@
                 metadata: { ...defaultConfig.metadata, ...(window.ChatWidgetConfig.metadata || {}) }, // Merge metadata
                 detectLocation: typeof window.ChatWidgetConfig.detectLocation === 'boolean' ? window.ChatWidgetConfig.detectLocation : defaultConfig.detectLocation, // Merge detectLocation
                 linkTarget: window.ChatWidgetConfig.linkTarget || null,
-                baseUrl: window.ChatWidgetConfig.baseUrl || ''
+                baseUrl: window.ChatWidgetConfig.baseUrl || '',
+                streaming: { ...defaultConfig.streaming, ...(window.ChatWidgetConfig.streaming || {}) }
             } : defaultConfig;
 
         // Calculate effective language AFTER merging config, detect from URL path
@@ -1476,6 +1480,102 @@
                 typingDiv.remove();
             }
         }
+
+        // Extrai objetos JSON completos de um buffer de texto (formato concatenado sem separadores)
+        function extractJsonObjects(buffer) {
+            const objects = [];
+            let depth = 0;
+            let start = -1;
+            let inString = false;
+            let escape = false;
+            for (let i = 0; i < buffer.length; i++) {
+                const ch = buffer[i];
+                if (escape) { escape = false; continue; }
+                if (ch === '\\' && inString) { escape = true; continue; }
+                if (ch === '"') { inString = !inString; continue; }
+                if (inString) continue;
+                if (ch === '{') {
+                    if (depth === 0) start = i;
+                    depth++;
+                } else if (ch === '}') {
+                    depth--;
+                    if (depth === 0 && start !== -1) {
+                        objects.push({ json: buffer.slice(start, i + 1), end: i });
+                        start = -1;
+                    }
+                }
+            }
+            const lastEnd = objects.length > 0 ? objects[objects.length - 1].end + 1 : 0;
+            return { objects: objects.map(o => o.json), remaining: buffer.slice(lastEnd) };
+        }
+
+        // Processa a resposta em streaming do webhook n8n e retorna a mensagem final
+        // onFirstContent(streamingDiv) é chamado quando o primeiro token de conteúdo chega
+        async function handleStreamingResponse(response, metadata, onFirstContent) {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let accumulated = '';       // texto acumulado do bloco atual
+            let finalMessage = '';      // última mensagem com conteúdo
+            let streamingDiv = null;    // div de mensagem criada ao vivo
+            let firstContentSeen = false;
+
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+
+                    const { objects, remaining } = extractJsonObjects(buffer);
+                    buffer = remaining;
+
+                    for (const jsonStr of objects) {
+                        let event;
+                        try { event = JSON.parse(jsonStr); } catch (e) { continue; }
+
+                        if (event.type === 'begin') {
+                            accumulated = '';
+                        } else if (event.type === 'item' && typeof event.content === 'string') {
+                            accumulated += event.content;
+                            if (accumulated.trim()) {
+                                if (!firstContentSeen) {
+                                    firstContentSeen = true;
+                                    hideTypingIndicator();
+                                    streamingDiv = document.createElement('div');
+                                    streamingDiv.className = 'chat-message bot streaming';
+                                    messagesContainer.appendChild(streamingDiv);
+                                    if (onFirstContent) onFirstContent(streamingDiv);
+                                }
+                                streamingDiv.innerHTML = renderSpecialContent(accumulated);
+                                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                                await new Promise(r => setTimeout(r, config.streaming?.tokenDelayMs ?? 30));
+                            }
+                        } else if (event.type === 'end') {
+                            if (accumulated.trim()) {
+                                finalMessage = accumulated;
+                            }
+                        }
+                    }
+                }
+            } finally {
+                reader.releaseLock();
+            }
+
+            // Se o streaming produziu um div ao vivo, finalizá-lo com quick actions e salvar
+            if (streamingDiv && finalMessage) {
+                streamingDiv.classList.remove('streaming');
+                const quickActions = processQuickActions(finalMessage);
+                streamingDiv.innerHTML = renderSpecialContent(quickActions.text);
+                renderQuickActions(quickActions, streamingDiv, metadata);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                saveChat();
+                return null; // sinaliza que já tratamos a exibição
+            }
+
+            // Fallback: sem streaming detectado, retornar texto para exibição normal
+            return finalMessage || null;
+        }
+
 
         // Função para verificar se estamos dentro de um bloco de código
         function isWithinCodeBlock(text, position) {
@@ -1848,57 +1948,28 @@
                 });
 
                 debug('Resposta do webhook - Status:', response.status);
-                let responseMessage = getText('processing', 'Processing...'); // Use new function
-                
+
                 // Verificar se a resposta é válida
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
 
-                // Tentar ler o texto da resposta primeiro
-                const responseText = await response.text();
-                debug('Resposta do webhook - Texto:', responseText);
+                // Tentar processar a resposta em streaming
+                const streamedMessage = await handleStreamingResponse(response, metadata, null);
 
-                try {
-                    // Tentar fazer o parse do JSON apenas se houver conteúdo
-                    if (responseText && responseText.trim()) {
-                        const data = JSON.parse(responseText);
-                        debug('Resposta do webhook - JSON:', data);
-                        
-                        // Verificar diferentes formatos possíveis de resposta
-                        if (data.output) {
-                            responseMessage = data.output;
-                        } else if (data.data && Array.isArray(data.data) && data.data.length > 0) {
-                            if (data.data[0].output) {
-                                responseMessage = data.data[0].output;
-                            }
-                        } else if (typeof data === 'string') {
-                            responseMessage = data;
-                        } else {
-                            debug('Resposta em formato desconhecido:', data);
-                            responseMessage = getText('fallback', 'Hi! How can I help?'); // Use new function
-                        }
+                // Se o streaming não produziu conteúdo, tentar fallback
+                if (streamedMessage !== null) {
+                    hideTypingIndicator();
+                    if (streamedMessage) {
+                        displayBotMessage(streamedMessage, metadata);
                     } else {
-                        debug('Resposta vazia do webhook');
-                        responseMessage = getText('fallback', 'Hi! How can I help?'); // Use new function
+                        displayBotMessage(getText('fallback', 'Hi! How can I help?'), metadata);
                     }
-                } catch (error) {
-                    debug('Erro ao processar JSON da resposta:', error, true);
-                    responseMessage = getText('fallback', 'Hi! How can I help?'); // Use new function
                 }
-                
-                // Remover o indicador de digitação
-                hideTypingIndicator();
-                
-                // Mostrar a resposta do bot
-                displayBotMessage(responseMessage, metadata);
             } catch (error) {
-                console.error("[DEBUG] startNewConversation().catch block triggered. Error object:", error); // Added log
-                console.error("[DEBUG] Error message:", error?.message); // Added log
-                console.error("[DEBUG] Error stack:", error?.stack); // Added log
                 debug('Erro ao iniciar conversa:', error, true);
                 hideTypingIndicator();
-                displayBotMessage(getText('error', 'Sorry, something went wrong.'), metadata); // Use new function for error message
+                displayBotMessage(getText('error', 'Sorry, something went wrong.'), metadata);
             }
         }
         
@@ -1941,54 +2012,28 @@
             });
 
             debug('Resposta do webhook - Status:', response.status);
-            let responseMessage = getText('processing', 'Processing...'); // Use new function
-                
+
             // Verificar se a resposta é válida
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            // Tentar ler o texto da resposta primeiro
-            const responseText = await response.text();
-            debug('Resposta do webhook - Texto:', responseText);
+            // Tentar processar a resposta em streaming
+            const streamedMessage = await handleStreamingResponse(response, metadata, null);
 
-            try {
-                // Tentar fazer o parse do JSON apenas se houver conteúdo
-                if (responseText && responseText.trim()) {
-                    const data = JSON.parse(responseText);
-                    debug('Resposta do webhook - JSON:', data);
-                    
-                    // Verificar diferentes formatos possíveis de resposta
-                    if (data.output) {
-                        responseMessage = data.output;
-                    } else if (data.data && Array.isArray(data.data) && data.data.length > 0) {
-                        if (data.data[0].output) {
-                            responseMessage = data.data[0].output;
-                        }
-                    } else if (typeof data === 'string') {
-                        responseMessage = data;
-                    } else {
-                        debug('Resposta em formato desconhecido:', data);
-                        responseMessage = getText('fallback', 'Hi! How can I help?'); // Use new function
-                    }
+            // Se o streaming não produziu conteúdo, tentar fallback JSON
+            if (streamedMessage !== null) {
+                hideTypingIndicator();
+                if (streamedMessage) {
+                    displayBotMessage(streamedMessage, metadata);
                 } else {
-                    debug('Resposta vazia do webhook');
-                    responseMessage = getText('fallback', 'Hi! How can I help?'); // Use new function
+                    displayBotMessage(getText('fallback', 'Hi! How can I help?'), metadata);
                 }
-            } catch (error) {
-                debug('Erro ao processar JSON da resposta:', error, true);
-                responseMessage = getText('fallback', 'Hi! How can I help?'); // Use new function
             }
-            
-            // Remover o indicador de digitação
-            hideTypingIndicator();
-            
-            // Mostrar a resposta do bot
-            displayBotMessage(responseMessage, metadata);
         } catch (error) {
             debug('Erro na chamada do webhook:', error, true);
             hideTypingIndicator();
-            displayBotMessage(getText('error', 'Sorry, something went wrong.'), metadata); // Use new function for error message
+            displayBotMessage(getText('error', 'Sorry, something went wrong.'), metadata);
         }
         }
 
@@ -2161,9 +2206,6 @@
                 quickActionMarkers.push({ marker, content: match });
                 return marker;
             });
-            
-            // Limpar espaços extras após processamento
-            html = html.trim();
             
             // Processar imagens markdown - ![alt](url)
             html = processImageMarkdown(html);
@@ -2705,6 +2747,8 @@
             if (quickActions.links.length > 0) {
                 const linksContainer = document.createElement('div');
                 linksContainer.className = 'quick-action-container';
+                linksContainer.style.flexDirection = 'column';
+                linksContainer.style.alignItems = 'flex-start';
 
                 quickActions.links.forEach(link => {
                     const linkElement = document.createElement('a');
