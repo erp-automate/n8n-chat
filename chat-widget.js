@@ -2182,8 +2182,9 @@
             }
             baseUrl = baseUrl.replace(/\/$/, '');
             html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, text, url) => {
+                url = url.trim();
                 const href = (!url.match(/^https?:\/\//)) ? baseUrl + url : url;
-                return `<a href="${href}" target="${linkTarget}">${text}</a>`;
+                return `<a href="${href}" target="${linkTarget}">${text.trim()}</a>`;
             });
             
             // Processar negrito - **texto**
